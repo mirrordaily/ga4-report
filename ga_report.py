@@ -16,7 +16,7 @@ from google.analytics.data_v1beta.types import Metric
 from google.analytics.data_v1beta.types import RunReportRequest
 from datetime import datetime
 
-def get_article(article_ids, extra='', limit:int = 20):
+def get_article(article_ids, extra='', limit:int = 10):
     GQL_ENDPOINT = os.environ['GQL_ENDPOINT']
     gql_transport = AIOHTTPTransport(url=GQL_ENDPOINT)
     gql_client = Client(transport=gql_transport,
@@ -69,7 +69,7 @@ def get_article(article_ids, extra='', limit:int = 20):
                     # Append post to report
                     rows += 1
                     report.append(post['post'])
-        if rows > limit:
+        if rows == limit:
             break
         #report.append({'title': row.dimension_values[0].value, 'uri': row.dimension_values[1].value, 'count': row.metric_values[0].value})
     return report
