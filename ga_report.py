@@ -16,13 +16,12 @@ from google.analytics.data_v1beta.types import Metric
 from google.analytics.data_v1beta.types import RunReportRequest
 from datetime import datetime
 
-def get_article(article_ids, extra=''):
+def get_article(article_ids, extra='', limit:int = 20):
     GQL_ENDPOINT = os.environ['GQL_ENDPOINT']
     gql_transport = AIOHTTPTransport(url=GQL_ENDPOINT)
     gql_client = Client(transport=gql_transport,
                         fetch_schema_from_transport=False)
     report = []
-    popular = {}
     rows = 0
     for article in article_ids:
         #writer.writerow([row.dimension_values[0].value, row.dimension_values[1].value.encode('utf-8'), row.metric_values[0].value])
@@ -66,18 +65,16 @@ def get_article(article_ids, extra=''):
                     }''' % (post_id, extra)
                 query = gql(post_gql)
                 post = gql_client.execute(query)
-                if isinstance(post, dict) and 'post' in post and post['post'] is not None and post['post']['state'] == 'published' and post['post']['id'] not in popular:
-                    # Avoid the dulplicate article
-                    popular[post['post']['id']] = 1
+                if isinstance(post, dict) and 'post' in post and post['post'] is not None and post['post']['state'] == 'published' and post['post']['id']:
                     # Append post to report
                     rows += 1
                     report.append(post['post'])
-        if rows > 20:
+        if rows > limit:
             break
         #report.append({'title': row.dimension_values[0].value, 'uri': row.dimension_values[1].value, 'count': row.metric_values[0].value})
     return report
 
-def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int=2):
+def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int=2, post_number:int = 20):
     """Runs a simple report on a Google Analytics 4 property."""
     # TODO(developer): Uncomment this variable and replace with your
     #  Google Analytics 4 property ID before running the sample.
@@ -106,7 +103,7 @@ def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int
     print("report result")
     print(response)
 
-    report = get_article(response.rows, extra)
+    report = get_article(response.rows, extra, post_number)
     gcs_path = os.environ['GCS_PATH']
     bucket = os.environ['BUCKET']
     upload_data(bucket, json.dumps(report, ensure_ascii=False).encode('utf8'), 'application/json', gcs_path + dest_file)
