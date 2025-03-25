@@ -34,11 +34,9 @@ def get_article(article_ids, extra='', limit:int = 10):
                     query{
                         post(where:{id:"%s"}){
                             id
-                            slug
                             sections{id, name, slug, state}
                             sectionsInInputOrder{id, name, slug, state}
                             title
-                            style
                             state
                             publishedDate
                             heroImage{
