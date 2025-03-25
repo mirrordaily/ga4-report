@@ -24,19 +24,16 @@ def get_article(article_ids, extra=''):
     report = []
     popular = {}
     rows = 0
-    print(article_ids, "article_ids")
     for article in article_ids:
         #writer.writerow([row.dimension_values[0].value, row.dimension_values[1].value.encode('utf-8'), row.metric_values[0].value])
         uri = article.dimension_values[1].value
-        print(uri, "uri")
         id_match = re.match('/story/(\w+)', uri)
         if id_match:
             post_id = id_match.group(1)
-            print(post_id, "post_id")
             if post_id:
                 post_gql = '''
                     query{
-                        post(where:{slug:"%s"}){
+                        post(where:{id:"%s"}){
                             id
                             slug
                             sections{id, name, slug, state}
@@ -44,6 +41,7 @@ def get_article(article_ids, extra=''):
                             title
                             style
                             state
+                            publishedDate
                             heroImage{
                                 id, 
                                 resized{
@@ -68,13 +66,13 @@ def get_article(article_ids, extra=''):
                     }''' % (post_id, extra)
                 query = gql(post_gql)
                 post = gql_client.execute(query)
-                if isinstance(post, dict) and 'post' in post and post['post'] is not None and post['post']['state'] == 'published' and post['post']['slug'] not in popular:
+                if isinstance(post, dict) and 'post' in post and post['post'] is not None and post['post']['state'] == 'published' and post['post']['id'] not in popular:
                     # Avoid the dulplicate article
-                    popular[post['post']['slug']] = 1
+                    popular[post['post']['id']] = 1
                     # Append post to report
-                    rows = rows + 1
+                    rows += 1
                     report.append(post['post'])
-        if rows > 30:
+        if rows > 20:
             break
         #report.append({'title': row.dimension_values[0].value, 'uri': row.dimension_values[1].value, 'count': row.metric_values[0].value})
     return report
