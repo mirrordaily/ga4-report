@@ -37,7 +37,6 @@ def get_article(article_ids, extra='', limit:int = 10):
                             sections{id, name, slug, state}
                             sectionsInInputOrder{id, name, slug, state}
                             title
-                            style
                             state
                             publishedDate
                             heroImage{
