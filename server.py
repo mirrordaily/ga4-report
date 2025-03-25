@@ -50,25 +50,18 @@ def generate_popular_report():
     '''
         Old implementation of popular report
     '''
-    if request.args.get('dest_file'):
-        dest_file = request.args.get('dest_file')
-    else:
-        dest_file = 'popular.json'
-    if request.args.get('extra_field'):
-        extra_field = request.args.get('extra_field')
-    else:
-        extra_field = ''
-    if 'GA_RESOURCE_ID' in os.environ:
-        ga_id = os.environ['GA_RESOURCE_ID']
-    else:
-        ga_id = "311149968"
-
+    
+    dest_file = request.args.get('dest_file', 'popular.json')
+    post_number = request.args.get('post_number', 10)
+    extra_field = request.args.get('extra_field','')
+    ga_id = os.environ.get('GA_RESOURCE_ID', "311149968")
+    ga_days = int(request.args.get('ga_days', '2'))
     # Check has allowed list of extra field.
     # If has, that value of extra_field must contain in env 'ALLOW_EXTRA_FIELD' to generate popular report        
     check_result = check_extra_field_in_allowed_list(extra_field)
     
     if check_result['status'] == 'success':
-        popular_report(ga_id, dest_file, extra_field)
+        popular_report(ga_id, dest_file, extra_field, ga_days, post_number)
 
     return jsonify(check_result)
 
