@@ -22,7 +22,7 @@ def get_article(article_ids, extra='', limit:int = 10):
     gql_client = Client(transport=gql_transport,
                         fetch_schema_from_transport=False)
     report = []
-    popular = {} 
+    popular = set()
     rows = 0
     for article in article_ids:
         #writer.writerow([row.dimension_values[0].value, row.dimension_values[1].value.encode('utf-8'), row.metric_values[0].value])
