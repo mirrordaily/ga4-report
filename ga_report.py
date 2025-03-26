@@ -22,8 +22,9 @@ def get_article(article_ids, extra='', limit:int = 10):
     gql_client = Client(transport=gql_transport,
                         fetch_schema_from_transport=False)
     report = []
+    popular = set(article_ids) # Avoid the dulplicate article
     rows = 0
-    for article in article_ids:
+    for article in popular:
         #writer.writerow([row.dimension_values[0].value, row.dimension_values[1].value.encode('utf-8'), row.metric_values[0].value])
         uri = article.dimension_values[1].value
         id_match = re.match('/story/(\w+)', uri)
