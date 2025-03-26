@@ -22,9 +22,9 @@ def get_article(article_ids, extra='', limit:int = 10):
     gql_client = Client(transport=gql_transport,
                         fetch_schema_from_transport=False)
     report = []
-    popular = set(article_ids) # Avoid the dulplicate article
+    popular = {} 
     rows = 0
-    for article in popular:
+    for article in article_ids:
         #writer.writerow([row.dimension_values[0].value, row.dimension_values[1].value.encode('utf-8'), row.metric_values[0].value])
         uri = article.dimension_values[1].value
         id_match = re.match('/story/(\w+)', uri)
@@ -64,7 +64,9 @@ def get_article(article_ids, extra='', limit:int = 10):
                     }''' % (post_id, extra)
                 query = gql(post_gql)
                 post = gql_client.execute(query)
-                if isinstance(post, dict) and 'post' in post and post['post'] is not None and post['post']['state'] == 'published' and post['post']['id']:
+                if isinstance(post, dict) and 'post' in post and post['post'] is not None and post['post']['state'] == 'published' and post['post']['id'] and post['post']['id'] not in popular:
+                    # Avoid the dulplicate article
+                    popular.add(post['post']['id'])
                     # Append post to report
                     rows += 1
                     report.append(post['post'])
