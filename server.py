@@ -52,7 +52,7 @@ def generate_popular_report():
     '''
     
     dest_file = request.args.get('dest_file', 'popular.json')
-    post_number = request.args.get('post_number', 10)
+    post_number = int(request.args.get('post_number', 10))
     extra_field = request.args.get('extra_field','')
     ga_id = os.environ.get('GA_RESOURCE_ID', "311149968")
     ga_days = int(request.args.get('ga_days', '2'))
