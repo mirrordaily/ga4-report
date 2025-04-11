@@ -40,6 +40,7 @@ def get_article(article_ids, extra='', limit:int = 10):
                             title
                             state
                             publishedDate
+                            brief
                             heroImage{
                                 id, 
                                 resized{
