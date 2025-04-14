@@ -40,6 +40,7 @@ def get_article(article_ids, extra='', limit:int = 10):
                             title
                             state
                             publishedDate
+                            brief
                             heroImage{
                                 id, 
                                 resized{
@@ -69,6 +70,7 @@ def get_article(article_ids, extra='', limit:int = 10):
                     popular.add(post['post']['id'])
                     # Append post to report
                     rows += 1
+                    post['post']['brief'] = post['post']['brief']['blocks'][0]['text'] if 'blocks' in post['post']['brief'] and len(post['post']['brief']['blocks']) > 0 else ''
                     report.append(post['post'])
         if rows == limit:
             break
