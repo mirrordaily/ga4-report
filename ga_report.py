@@ -70,6 +70,7 @@ def get_article(article_ids, extra='', limit:int = 10):
                     popular.add(post['post']['id'])
                     # Append post to report
                     rows += 1
+                    post['post']['brief'] = post['post']['brief']['block'][0]['text'] if 'block' in post['post']['brief'] and len(post['post']['brief']['block']) > 0 else ''
                     report.append(post['post'])
         if rows == limit:
             break
