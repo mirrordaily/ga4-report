@@ -35,7 +35,7 @@ def get_article(article_ids, extra='', limit:int = 10):
                     query{
                         post(where:{id:"%s"}){
                             id
-                            sections{id, name, slug, state}
+                            sections{id, name, slug, state, color}
                             sectionsInInputOrder{id, name, slug, state}
                             title
                             state
