@@ -40,7 +40,8 @@ def get_article(article_ids, extra='', limit:int = 10):
                             title
                             state
                             publishedDate
-                            brief  
+                            brief
+                            isAdult
                             categories {
                                 id,
                                 name,
@@ -146,6 +147,7 @@ def recent_popular_report(property_id, dest_file='popular.json', days: int=1):
                 style
                 state
                 publishedDate
+                isAdult
                 heroImage{{
                     id, 
                     resized{{
