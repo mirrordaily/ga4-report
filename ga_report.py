@@ -35,12 +35,13 @@ def get_article(article_ids, extra='', limit:int = 10):
                     query{
                         post(where:{id:"%s"}){
                             id
-                            sections{id, name, slug, state}
+                            sections{id, name, slug, state, color}
                             sectionsInInputOrder{id, name, slug, state}
                             title
                             state
                             publishedDate
-                            brief  
+                            brief
+                            isAdult
                             categories {
                                 id,
                                 name,
@@ -146,6 +147,7 @@ def recent_popular_report(property_id, dest_file='popular.json', days: int=1):
                 style
                 state
                 publishedDate
+                isAdult
                 heroImage{{
                     id, 
                     resized{{
