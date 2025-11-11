@@ -122,10 +122,10 @@ def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int
     print(response)
 
     # 將前 15 筆隨機打亂
-    top_15_rows = list(response.rows)
-    random.shuffle(top_15_rows)
+    top_rows = list(response.rows)
+    random.shuffle(top_rows)
 
-    report = get_article(top_15_rows, extra, post_number)
+    report = get_article(top_rows, extra, post_number)
     gcs_path = os.environ['GCS_PATH']
     bucket = os.environ['BUCKET']
     upload_data(bucket, json.dumps(report, ensure_ascii=False).encode('utf8'), 'application/json', gcs_path + dest_file)
