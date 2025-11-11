@@ -3,6 +3,7 @@ import re
 import json
 import sys
 import codecs
+import random
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql import gql, Client
 from datetime import datetime, timedelta
@@ -10,6 +11,7 @@ from google.cloud import datastore
 from google.oauth2 import service_account
 from google.cloud import storage
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
+from google.analytics.data_v1beta.types import OrderBy
 from google.analytics.data_v1beta.types import DateRange
 from google.analytics.data_v1beta.types import Dimension
 from google.analytics.data_v1beta.types import Metric
@@ -83,7 +85,7 @@ def get_article(article_ids, extra='', limit:int = 10):
         #report.append({'title': row.dimension_values[0].value, 'uri': row.dimension_values[1].value, 'count': row.metric_values[0].value})
     return report
 
-def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int=2, post_number:int = 20):
+def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int=3, post_number:int = 15):
     """Runs a simple report on a Google Analytics 4 property."""
     # TODO(developer): Uncomment this variable and replace with your
     #  Google Analytics 4 property ID before running the sample.
@@ -102,17 +104,28 @@ def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int
     request = RunReportRequest(
         property=f"properties/{property_id}",
         dimensions=[
-		    Dimension(name="pageTitle"),
-		    Dimension(name="pagePath")
-		],
+            Dimension(name="pageTitle"),
+            Dimension(name="pagePath")
+        ],
         metrics=[Metric(name="screenPageViews")],
         date_ranges=[DateRange(start_date=start_date, end_date="today")],
+        order_bys=[
+            OrderBy(
+                metric=OrderBy.MetricOrderBy(metric_name="screenPageViews"),
+                desc=True  # 先按 PV 降冪排序
+            )
+        ],
+        limit=int(post_number)  # 限定數量
     )
     response = client.run_report(request)
     print("report result")
     print(response)
 
-    report = get_article(response.rows, extra, post_number)
+    # 將前 15 筆隨機打亂
+    top_rows = list(response.rows)
+    random.shuffle(top_rows)
+
+    report = get_article(top_rows, extra, post_number)
     gcs_path = os.environ['GCS_PATH']
     bucket = os.environ['BUCKET']
     upload_data(bucket, json.dumps(report, ensure_ascii=False).encode('utf8'), 'application/json', gcs_path + dest_file)
@@ -219,17 +232,22 @@ def upload_data(bucket_name: str, data: str, content_type: str, destination_blob
     '''Uploads a file to the bucket.'''
     # bucket_name = 'your-bucket-name'
     # data = 'storage-object-content'
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
-    blob = bucket.blob(destination_blob_name)
-    # blob.content_encoding = 'gzip'
-    blob.upload_from_string(
-        # data=gzip.compress(data=data, compresslevel=9),
-        data=bytes(data),
-        content_type=content_type, client=storage_client)
-    blob.content_language = 'zh'
-    blob.cache_control = 'max-age=300,public'
-    blob.patch()
+    try:
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(bucket_name)
+        blob = bucket.blob(destination_blob_name)
+        # blob.content_encoding = 'gzip'
+        blob.upload_from_string(
+            # data=gzip.compress(data=data, compresslevel=9),
+            data=bytes(data),
+            content_type=content_type, client=storage_client)
+        blob.content_language = 'zh'
+        blob.cache_control = 'max-age=300,public'
+        blob.patch()
+        print(f"[DEBUG]上傳成功: gs://{bucket_name}/{destination_blob_name}")
+    except Exception as e:
+        print(f"[DEBUG]上傳失敗: {destination_blob_name} - 錯誤: {e}")
+        raise
 
 if __name__ == "__main__":  
 	if 'GA_RESOURCE_ID' in os.environ:
