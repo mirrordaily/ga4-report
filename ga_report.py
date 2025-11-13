@@ -1,3 +1,4 @@
+import io
 import os
 import re
 import json
@@ -103,7 +104,9 @@ def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int
     # Using a default constructor instructs the client to use the credentials
     # specified in GOOGLE_APPLICATION_CREDENTIALS environment variable.
     if sys.stdout:
-        sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+        # Fix: '_io.FileIO' object has no detach() method in Flask/Docker/WSGI environment
+        # sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     client = BetaAnalyticsDataClient()
 
     current_time = datetime.now()
@@ -144,7 +147,9 @@ def recent_popular_report(property_id, dest_file='popular.json', days: int=1):
     
     # get recent posts
     if sys.stdout:
-        sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+        # Fix: '_io.FileIO' object has no detach() method in Flask/Docker/WSGI environment
+        # sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     current_time = datetime.now()
     start_datetime = (current_time - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
     filter_publishedDate = f"\"{start_datetime.isoformat(timespec='seconds')}Z\""
