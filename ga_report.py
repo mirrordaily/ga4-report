@@ -26,6 +26,8 @@ def get_article(article_ids, extra='', limit:int = 10):
     report = []
     popular = set()
     rows = 0
+    # 設定 72 小時前的時間
+    time_threshold = datetime.now() - timedelta(hours=72)
     for article in article_ids:
         #writer.writerow([row.dimension_values[0].value, row.dimension_values[1].value.encode('utf-8'), row.metric_values[0].value])
         uri = article.dimension_values[1].value
@@ -74,15 +76,22 @@ def get_article(article_ids, extra='', limit:int = 10):
                 query = gql(post_gql)
                 post = gql_client.execute(query)
                 if isinstance(post, dict) and 'post' in post and post['post'] is not None and post['post']['state'] == 'published' and post['post']['id'] and post['post']['id'] not in popular:
-                    # Avoid the dulplicate article
-                    popular.add(post['post']['id'])
-                    # Append post to report
-                    rows += 1
-                    post['post']['brief'] = post['post']['brief']['blocks'][0]['text'] if 'blocks' in post['post']['brief'] and len(post['post']['brief']['blocks']) > 0 else ''
-                    report.append(post['post'])
+                    # 取得文章發佈時間
+                    pub_date = post['post'].get('publishedDate')
+                    if pub_date:
+                        pub_datetime = datetime.fromisoformat(pub_date)
+                        # 只保留 72 小時內發佈的文章
+                        if pub_datetime >= time_threshold:
+                            # Avoid the dulplicate article
+                            popular.add(post['post']['id'])
+                            # Append post to report
+                            rows += 1
+                            post['post']['brief'] = post['post']['brief']['blocks'][0]['text'] if 'blocks' in post['post']['brief'] and len(post['post']['brief']['blocks']) > 0 else ''
+                            report.append(post['post'])
         if rows == limit:
             break
         #report.append({'title': row.dimension_values[0].value, 'uri': row.dimension_values[1].value, 'count': row.metric_values[0].value})
+    random.shuffle(report)
     return report
 
 def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int=3, post_number:int = 15):
@@ -115,17 +124,12 @@ def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int
                 desc=True  # 先按 PV 降冪排序
             )
         ],
-        limit=int(post_number)  # 限定數量
     )
     response = client.run_report(request)
     print("report result")
     print(response)
 
-    # 將前 15 筆隨機打亂
-    top_rows = list(response.rows)
-    random.shuffle(top_rows)
-
-    report = get_article(top_rows, extra, post_number)
+    report = get_article(response.rows, extra, post_number)
     gcs_path = os.environ['GCS_PATH']
     bucket = os.environ['BUCKET']
     upload_data(bucket, json.dumps(report, ensure_ascii=False).encode('utf8'), 'application/json', gcs_path + dest_file)
