@@ -7,7 +7,7 @@ import codecs
 import random
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql import gql, Client
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from google.cloud import datastore
 from google.oauth2 import service_account
 from google.cloud import storage
@@ -17,7 +17,6 @@ from google.analytics.data_v1beta.types import DateRange
 from google.analytics.data_v1beta.types import Dimension
 from google.analytics.data_v1beta.types import Metric
 from google.analytics.data_v1beta.types import RunReportRequest
-from datetime import datetime
 
 def get_article(article_ids, extra='', limit:int = 10):
     GQL_ENDPOINT = os.environ['GQL_ENDPOINT']
@@ -28,7 +27,7 @@ def get_article(article_ids, extra='', limit:int = 10):
     popular = set()
     rows = 0
     # 設定 72 小時前的時間
-    time_threshold = datetime.now() - timedelta(hours=72)
+    time_threshold = datetime.now(timezone.utc) - timedelta(hours=72)
     for article in article_ids:
         #writer.writerow([row.dimension_values[0].value, row.dimension_values[1].value.encode('utf-8'), row.metric_values[0].value])
         uri = article.dimension_values[1].value
@@ -81,6 +80,8 @@ def get_article(article_ids, extra='', limit:int = 10):
                     pub_date = post['post'].get('publishedDate')
                     if pub_date:
                         pub_datetime = datetime.fromisoformat(pub_date)
+                        if pub_datetime.tzinfo is None:
+                            pub_datetime = pub_datetime.replace(tzinfo=timezone.utc)
                         # 只保留 72 小時內發佈的文章
                         if pub_datetime >= time_threshold:
                             # Avoid the dulplicate article
