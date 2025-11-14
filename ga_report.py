@@ -108,10 +108,10 @@ def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int
 
     # Using a default constructor instructs the client to use the credentials
     # specified in GOOGLE_APPLICATION_CREDENTIALS environment variable.
-    # if sys.stdout:
-    #     # Fix: '_io.FileIO' object has no detach() method in Flask/Docker/WSGI environment
-    #     # sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
-    #     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    if sys.stdout:
+        # Fix: '_io.FileIO' object has no detach() method in Flask/Docker/WSGI environment
+        # sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     try:
         client = BetaAnalyticsDataClient()
         print("[GA Report Debug] GA client initialized")
@@ -153,6 +153,7 @@ def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int
     bucket = os.environ['BUCKET']
 
     dest_path = urllib.parse.quote(gcs_path + dest_file, safe="/:_-.")  # 只 encode 非安全字元
+    print(f"GCS path: {dest_path}")
     data_bytes = json.dumps(report, ensure_ascii=False).encode('utf-8')
     upload_data(bucket, data_bytes, 'application/json', dest_path)
     # upload_data(bucket, json.dumps(report, ensure_ascii=False).encode('utf8'), 'application/json', gcs_path + dest_file)
