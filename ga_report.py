@@ -5,6 +5,7 @@ import json
 import sys
 import codecs
 import random
+import urllib.parse
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql import gql, Client
 from datetime import datetime, timezone, timedelta
@@ -96,6 +97,7 @@ def get_article(article_ids, extra='', limit:int = 10):
                     continue
         #report.append({'title': row.dimension_values[0].value, 'uri': row.dimension_values[1].value, 'count': row.metric_values[0].value})
     random.shuffle(report)
+    print(f"[GA Report Debug] Report contains {len(report)} articles")
     return report
 
 def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int=3, post_number:int = 15):
@@ -149,7 +151,11 @@ def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int
     report = get_article(response.rows, extra, post_number)
     gcs_path = os.environ['GCS_PATH']
     bucket = os.environ['BUCKET']
-    upload_data(bucket, json.dumps(report, ensure_ascii=False).encode('utf8'), 'application/json', gcs_path + dest_file)
+
+    dest_path = urllib.parse.quote(gcs_path + dest_file, safe="/:_-.")  # 只 encode 非安全字元
+    data_bytes = json.dumps(report, ensure_ascii=False).encode('utf-8')
+    upload_data(bucket, data_bytes, 'application/json', dest_path)
+    # upload_data(bucket, json.dumps(report, ensure_ascii=False).encode('utf8'), 'application/json', gcs_path + dest_file)
     return "Ok"
 
 def recent_popular_report(property_id, dest_file='popular.json', days: int=1):
