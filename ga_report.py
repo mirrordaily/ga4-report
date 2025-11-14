@@ -25,19 +25,22 @@ def get_article(article_ids, extra='', limit:int = 10):
                         fetch_schema_from_transport=False)
     report = []
     popular = set()
-    rows = 0
     # 設定 72 小時前的時間
     time_threshold = datetime.now(timezone.utc) - timedelta(hours=72)
     for article in article_ids:
+        # 如果已經收集到足夠的文章,直接跳出
+        if len(report) >= limit:
+            break
+
         #writer.writerow([row.dimension_values[0].value, row.dimension_values[1].value.encode('utf-8'), row.metric_values[0].value])
         uri = article.dimension_values[1].value
-        id_match = re.match('/story/(\w+)', uri)
+        id_match = re.match(r'/story/(\w+)', uri)
         if id_match:
             post_id = id_match.group(1)
-            if post_id:
+            if post_id and post_id not in popular:
                 post_gql = '''
-                    query{
-                        post(where:{id:"%s"}){
+                    query GetPost($id: ID!) {
+                        post(where: { id: $id }) {
                             id
                             sections{id, name, slug, state, color}
                             sectionsInInputOrder{id, name, slug, state}
@@ -72,26 +75,25 @@ def get_article(article_ids, extra='', limit:int = 10):
                             }
                             %s
                         }
-                    }''' % (post_id, extra)
-                query = gql(post_gql)
-                post = gql_client.execute(query)
-                if isinstance(post, dict) and 'post' in post and post['post'] is not None and post['post']['state'] == 'published' and post['post']['id'] and post['post']['id'] not in popular:
-                    # 取得文章發佈時間
-                    pub_date = post['post'].get('publishedDate')
-                    if pub_date:
-                        pub_datetime = datetime.fromisoformat(pub_date)
-                        if pub_datetime.tzinfo is None:
-                            pub_datetime = pub_datetime.replace(tzinfo=timezone.utc)
-                        # 只保留 72 小時內發佈的文章
-                        if pub_datetime >= time_threshold:
-                            # Avoid the dulplicate article
-                            popular.add(post['post']['id'])
-                            # Append post to report
-                            rows += 1
-                            post['post']['brief'] = post['post']['brief']['blocks'][0]['text'] if 'blocks' in post['post']['brief'] and len(post['post']['brief']['blocks']) > 0 else ''
-                            report.append(post['post'])
-        if rows == limit:
-            break
+                    }''' % extra
+                
+                try:
+                    query = gql(post_gql)
+                    post = gql_client.execute(query, variable_values={'id': post_id})
+                    if isinstance(post, dict) and 'post' in post and post['post'] is not None and post['post']['state'] == 'published' and post['post']['id'] and post['post']['id'] not in popular:
+                        # 取得文章發佈時間
+                        pub_date = post['post'].get('publishedDate')
+                        if pub_date:
+                            pub_datetime = datetime.fromisoformat(pub_date.replace('Z', '+00:00'))
+                            # 只保留 72 小時內發佈的文章
+                            if pub_datetime >= time_threshold:
+                                # Avoid the dulplicate article
+                                popular.add(post['post']['id'])
+                                post['post']['brief'] = post['post']['brief']['blocks'][0]['text'] if 'blocks' in post['post']['brief'] and len(post['post']['brief']['blocks']) > 0 else ''
+                                report.append(post['post'])
+                except Exception as e:
+                    print(f"Error fetching post {post_id}: {e}")
+                    continue
         #report.append({'title': row.dimension_values[0].value, 'uri': row.dimension_values[1].value, 'count': row.metric_values[0].value})
     random.shuffle(report)
     return report
@@ -104,11 +106,16 @@ def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int
 
     # Using a default constructor instructs the client to use the credentials
     # specified in GOOGLE_APPLICATION_CREDENTIALS environment variable.
-    if sys.stdout:
-        # Fix: '_io.FileIO' object has no detach() method in Flask/Docker/WSGI environment
-        # sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    client = BetaAnalyticsDataClient()
+    # if sys.stdout:
+    #     # Fix: '_io.FileIO' object has no detach() method in Flask/Docker/WSGI environment
+    #     # sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+    #     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    try:
+        client = BetaAnalyticsDataClient()
+        print("[GA Report Debug] GA client initialized")
+    except Exception as e:
+        print("[GA Report Debug] GA client init failed:", e)
+        raise
 
     current_time = datetime.now()
     start_datetime = current_time - timedelta(days=ga_days)
@@ -129,9 +136,15 @@ def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int
             )
         ],
     )
-    response = client.run_report(request)
+    try:
+        response = client.run_report(request)
+        print("[GA Report Debug] GA response received")
+    except Exception as e:
+        print("[GA Report Debug] run_report failed:", e)
+        raise
     print("report result")
-    print(response)
+    print(f"Number of rows: {len(response.rows)}")
+    # print(response)
 
     report = get_article(response.rows, extra, post_number)
     gcs_path = os.environ['GCS_PATH']
