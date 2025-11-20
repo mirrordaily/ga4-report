@@ -52,10 +52,10 @@ def generate_popular_report():
     '''
     
     dest_file = request.args.get('dest_file', 'popular.json')
-    post_number = int(request.args.get('post_number', 10))
+    post_number = int(request.args.get('post_number', 15)) # default: 15
     extra_field = request.args.get('extra_field','')
     ga_id = os.environ.get('GA_RESOURCE_ID', "311149968")
-    ga_days = int(request.args.get('ga_days', '2'))
+    ga_days = int(request.args.get('ga_days', '3')) # default: 72 小時
     # Check has allowed list of extra field.
     # If has, that value of extra_field must contain in env 'ALLOW_EXTRA_FIELD' to generate popular report        
     check_result = check_extra_field_in_allowed_list(extra_field)

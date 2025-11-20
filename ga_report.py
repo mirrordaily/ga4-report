@@ -1,20 +1,23 @@
+import io
 import os
 import re
 import json
 import sys
 import codecs
+import random
+import urllib.parse
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql import gql, Client
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from google.cloud import datastore
 from google.oauth2 import service_account
 from google.cloud import storage
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
+from google.analytics.data_v1beta.types import OrderBy
 from google.analytics.data_v1beta.types import DateRange
 from google.analytics.data_v1beta.types import Dimension
 from google.analytics.data_v1beta.types import Metric
 from google.analytics.data_v1beta.types import RunReportRequest
-from datetime import datetime
 
 def get_article(article_ids, extra='', limit:int = 10):
     GQL_ENDPOINT = os.environ['GQL_ENDPOINT']
@@ -23,17 +26,22 @@ def get_article(article_ids, extra='', limit:int = 10):
                         fetch_schema_from_transport=False)
     report = []
     popular = set()
-    rows = 0
+    # 設定 72 小時前的時間
+    time_threshold = datetime.now(timezone.utc) - timedelta(hours=72)
     for article in article_ids:
+        # 如果已經收集到足夠的文章,直接跳出
+        if len(report) >= limit:
+            break
+
         #writer.writerow([row.dimension_values[0].value, row.dimension_values[1].value.encode('utf-8'), row.metric_values[0].value])
         uri = article.dimension_values[1].value
-        id_match = re.match('/story/(\w+)', uri)
+        id_match = re.match(r'/story/(\w+)', uri)
         if id_match:
             post_id = id_match.group(1)
-            if post_id:
+            if post_id and post_id not in popular:
                 post_gql = '''
-                    query{
-                        post(where:{id:"%s"}){
+                    query GetPost($id: ID!) {
+                        post(where: { id: $id }) {
                             id
                             sections{id, name, slug, state, color}
                             sectionsInInputOrder{id, name, slug, state}
@@ -68,22 +76,31 @@ def get_article(article_ids, extra='', limit:int = 10):
                             }
                             %s
                         }
-                    }''' % (post_id, extra)
-                query = gql(post_gql)
-                post = gql_client.execute(query)
-                if isinstance(post, dict) and 'post' in post and post['post'] is not None and post['post']['state'] == 'published' and post['post']['id'] and post['post']['id'] not in popular:
-                    # Avoid the dulplicate article
-                    popular.add(post['post']['id'])
-                    # Append post to report
-                    rows += 1
-                    post['post']['brief'] = post['post']['brief']['blocks'][0]['text'] if 'blocks' in post['post']['brief'] and len(post['post']['brief']['blocks']) > 0 else ''
-                    report.append(post['post'])
-        if rows == limit:
-            break
+                    }''' % extra
+                
+                try:
+                    query = gql(post_gql)
+                    post = gql_client.execute(query, variable_values={'id': post_id})
+                    if isinstance(post, dict) and 'post' in post and post['post'] is not None and post['post']['state'] == 'published' and post['post']['id'] and post['post']['id'] not in popular:
+                        # 取得文章發佈時間
+                        pub_date = post['post'].get('publishedDate')
+                        if pub_date:
+                            pub_datetime = datetime.fromisoformat(pub_date.replace('Z', '+00:00'))
+                            # 只保留 72 小時內發佈的文章
+                            if pub_datetime >= time_threshold:
+                                # Avoid the dulplicate article
+                                popular.add(post['post']['id'])
+                                post['post']['brief'] = post['post']['brief']['blocks'][0]['text'] if 'blocks' in post['post']['brief'] and len(post['post']['brief']['blocks']) > 0 else ''
+                                report.append(post['post'])
+                except Exception as e:
+                    print(f"Error fetching post {post_id}: {e}")
+                    continue
         #report.append({'title': row.dimension_values[0].value, 'uri': row.dimension_values[1].value, 'count': row.metric_values[0].value})
+    random.shuffle(report)
+    print(f"[GA Report Debug] Report contains {len(report)} articles")
     return report
 
-def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int=2, post_number:int = 20):
+def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int=3, post_number:int = 15):
     """Runs a simple report on a Google Analytics 4 property."""
     # TODO(developer): Uncomment this variable and replace with your
     #  Google Analytics 4 property ID before running the sample.
@@ -92,8 +109,15 @@ def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int
     # Using a default constructor instructs the client to use the credentials
     # specified in GOOGLE_APPLICATION_CREDENTIALS environment variable.
     if sys.stdout:
-        sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
-    client = BetaAnalyticsDataClient()
+        # Fix: '_io.FileIO' object has no detach() method in Flask/Docker/WSGI environment
+        # sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    try:
+        client = BetaAnalyticsDataClient()
+        print("[GA Report Debug] GA client initialized")
+    except Exception as e:
+        print("[GA Report Debug] GA client init failed:", e)
+        raise
 
     current_time = datetime.now()
     start_datetime = current_time - timedelta(days=ga_days)
@@ -102,20 +126,37 @@ def popular_report(property_id, dest_file='popular.json', extra='', ga_days: int
     request = RunReportRequest(
         property=f"properties/{property_id}",
         dimensions=[
-		    Dimension(name="pageTitle"),
-		    Dimension(name="pagePath")
-		],
+            Dimension(name="pageTitle"),
+            Dimension(name="pagePath")
+        ],
         metrics=[Metric(name="screenPageViews")],
         date_ranges=[DateRange(start_date=start_date, end_date="today")],
+        order_bys=[
+            OrderBy(
+                metric=OrderBy.MetricOrderBy(metric_name="screenPageViews"),
+                desc=True  # 先按 PV 降冪排序
+            )
+        ],
     )
-    response = client.run_report(request)
+    try:
+        response = client.run_report(request)
+        print("[GA Report Debug] GA response received")
+    except Exception as e:
+        print("[GA Report Debug] run_report failed:", e)
+        raise
     print("report result")
-    print(response)
+    print(f"Number of rows: {len(response.rows)}")
+    # print(response)
 
     report = get_article(response.rows, extra, post_number)
     gcs_path = os.environ['GCS_PATH']
     bucket = os.environ['BUCKET']
-    upload_data(bucket, json.dumps(report, ensure_ascii=False).encode('utf8'), 'application/json', gcs_path + dest_file)
+
+    dest_path = urllib.parse.quote(gcs_path + dest_file, safe="/:_-.")  # 只 encode 非安全字元
+    print(f"GCS path: {dest_path}")
+    data_bytes = json.dumps(report, ensure_ascii=False).encode('utf-8')
+    upload_data(bucket, data_bytes, 'application/json', dest_path)
+    # upload_data(bucket, json.dumps(report, ensure_ascii=False).encode('utf8'), 'application/json', gcs_path + dest_file)
     return "Ok"
 
 def recent_popular_report(property_id, dest_file='popular.json', days: int=1):
@@ -127,7 +168,9 @@ def recent_popular_report(property_id, dest_file='popular.json', days: int=1):
     
     # get recent posts
     if sys.stdout:
-        sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+        # Fix: '_io.FileIO' object has no detach() method in Flask/Docker/WSGI environment
+        # sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     current_time = datetime.now()
     start_datetime = (current_time - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
     filter_publishedDate = f"\"{start_datetime.isoformat(timespec='seconds')}Z\""
@@ -219,17 +262,22 @@ def upload_data(bucket_name: str, data: str, content_type: str, destination_blob
     '''Uploads a file to the bucket.'''
     # bucket_name = 'your-bucket-name'
     # data = 'storage-object-content'
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
-    blob = bucket.blob(destination_blob_name)
-    # blob.content_encoding = 'gzip'
-    blob.upload_from_string(
-        # data=gzip.compress(data=data, compresslevel=9),
-        data=bytes(data),
-        content_type=content_type, client=storage_client)
-    blob.content_language = 'zh'
-    blob.cache_control = 'max-age=300,public'
-    blob.patch()
+    try:
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(bucket_name)
+        blob = bucket.blob(destination_blob_name)
+        # blob.content_encoding = 'gzip'
+        blob.upload_from_string(
+            # data=gzip.compress(data=data, compresslevel=9),
+            data=bytes(data),
+            content_type=content_type, client=storage_client)
+        blob.content_language = 'zh'
+        blob.cache_control = 'max-age=300,public'
+        blob.patch()
+        print(f"[DEBUG]上傳成功: gs://{bucket_name}/{destination_blob_name}")
+    except Exception as e:
+        print(f"[DEBUG]上傳失敗: {destination_blob_name} - 錯誤: {e}")
+        raise
 
 if __name__ == "__main__":  
 	if 'GA_RESOURCE_ID' in os.environ:
