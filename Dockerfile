@@ -1,4 +1,4 @@
-FROM gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+FROM python:3.11-slim-bookworm
 
 COPY .  /usr/src/app/ga4-report
 WORKDIR  /usr/src/app/ga4-report
@@ -6,7 +6,7 @@ WORKDIR  /usr/src/app/ga4-report
 RUN addgroup user && adduser -h /home/user -D user -G user -s /bin/sh
 
 RUN apt-get update \
-    && apt-get install -y gcc libc-dev libxslt-dev libxml2 libpq-dev python3.11-venv
+    && apt-get install -y gcc libc-dev libxslt-dev libxml2 libpq-dev
 
 # Install packages in virtual environment if python version is >= 3.11
 RUN python3 -m venv venv
